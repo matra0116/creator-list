@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Creator Directory | 星結プロダクション</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&display=swap');
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #0f121d;
+            color: #e0e0e0;
+            background-image: radial-gradient(circle at 20% 30%, rgba(98, 106, 160, 0.1) 0%, transparent 40%), radial-gradient(circle at 80% 70%, rgba(205, 151, 180, 0.1) 0%, transparent 40%);
+            min-height: 100vh;
+        }
+        .star { position: fixed; background: white; border-radius: 50%; opacity: 0.3; pointer-events: none; }
+        .creator-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(98, 106, 160, 0.3);
+            transition: all 0.3s ease;
+            backdrop-filter: blur(8px);
+        }
+        .creator-card:hover { transform: translateY(-5px); border-color: #CD97B4; background: rgba(255, 255, 255, 0.08); }
+        .accent-text { color: #CD97B4; }
+        .base-bg { background-color: #626AA0; }
+        input, select {
+            background: rgba(255, 255, 255, 0.1) !important;
+            border: 1px solid rgba(98, 106, 160, 0.5) !important;
+            color: white !important;
+            color-scheme: dark;
+        }
+        select option { background-color: #1a1d2e; color: white; }
+        
+        /* SNSアイコンを公式ロゴとして表示するための設定 */
+        .sns-icon {
+            display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 50%;
+            background: white; /* ロゴを見やすくするため背景を白に */
+            transition: 0.2s;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+        .sns-icon:hover { transform: scale(1.1); box-shadow: 0 0 10px #CD97B4; }
+        .sns-icon img { width: 24px; height: 24px; object-fit: contain; }
+        
+        @keyframes pulse { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.8; } }
+    </style>
+</head>
+<body class="pb-20">
+    <div id="stars-container"></div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <header class="py-10 text-center">
+            <h1 class="text-3xl sm:text-4xl font-bold tracking-widest mb-2"><span class="accent-text">CREATOR</span> LIST</h1>
+            <p class="text-gray-400 text-sm">星結プロダクション 提携・依頼実績クリエイター</p>
+        </header>
+
+        <div class="mb-10 pb-8 border-b border-[#CD97B4]/20">
+            <div class="flex flex-col md:flex-row gap-4 justify-center items-center">
+                <div class="relative w-full md:w-80">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+                    <input type="text" id="searchInput" placeholder="名前で検索..." class="w-full pl-10 pr-4 py-2 rounded-full focus:outline-none focus:ring-2 focus:ring-[#CD97B4]">
+                </div>
+                <div class="relative w-full md:w-60">
+                    <i data-lucide="filter" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+                    <select id="typeFilter" class="w-full pl-10 pr-4 py-2 rounded-full appearance-none cursor-pointer">
+                        <option value="all">すべての種類</option>
+                        <option value="見本">すべての種類</option>
+                        <option value="イラストレーター">イラストレーター</option>
+                        <option value="Live2Dモデラー">Live2Dモデラー</option>
+                        <option value="動画師">動画師</option>
+                        <option value="MIX師">MIX師</option>
+                        <option value="ロゴ・デザイン">ロゴ・デザイン</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div id="creatorGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div class="col-span-full text-center py-10 text-gray-400">読み込み中...</div>
+        </div>
+        <div id="noResults" class="hidden text-center py-20 text-gray-500">該当するクリエイターは見つかりませんでした。</div>
+    </div>
+
+    <script>
+        // ★ここにGoogleスプレッドシートのCSVリンクを貼ってください
+        const SPREADSHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRrL-gWXqimJT3i3HClWMUqS0TrhbynySVlfsfMsdPYIfJt1Lb8x03OAEG1zR2pZPjeQPd0yd9ZjBZe/pubhtml?gid=0&single=true';
+
+        let creators = [];
+
+        // ドメインから公式アイコンを取得するための設定
+        const SNS_DOMAINS = {
+            x_url: 'x.com',
+            youtube_url: 'youtube.com',
+            litlink_url: 'lit.link',
+            foriio_url: 'foriio.com',
+            skeb_url: 'skeb.jp',
+            booth_url: 'booth.pm',
+            website_url: '', // 個別HPはサイトごとにアイコンが変わる
+            other_url: ''
+        };
+
+        async function init() {
+            createStars();
+            try {
+                const response = await fetch(SPREADSHEET_CSV_URL);
+                const csvData = await response.text();
+                Papa.parse(csvData, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        creators = results.data;
+                        renderCreators();
+                    }
+                });
+            } catch (error) {
+                console.error("Fetch Error:", error);
+                document.getElementById('creatorGrid').innerHTML = '<div class="col-span-full text-center text-red-400">データの読み込みに失敗しました。</div>';
+            }
+        }
+
+        function renderCreators(filterName = '', filterType = 'all') {
+            const grid = document.getElementById('creatorGrid');
+            const noResults = document.getElementById('noResults');
+            
+            const filtered = creators.filter(c => {
+                const matchesName = (c.name || '').toLowerCase().includes(filterName.toLowerCase());
+                const matchesType = filterType === 'all' || (c.creator_type || '').trim() === filterType;
+                return matchesName && matchesType;
+            }).sort((a, b) => Number(a.sort_order || 999) - Number(b.sort_order || 999));
+
+            grid.innerHTML = '';
+            if (filtered.length === 0) {
+                noResults.classList.remove('hidden');
+            } else {
+                noResults.classList.add('hidden');
+                filtered.forEach(c => {
+                    let snsHtml = '';
+                    Object.keys(SNS_DOMAINS).forEach(key => {
+                        const url = (c[key] || '').trim();
+                        if (url && url.startsWith('http')) {
+                            // URLからドメインを抽出するか、設定したドメインを使用してアイコンを取得
+                            const domain = SNS_DOMAINS[key] || new URL(url).hostname;
+                            const iconUrl = `https://www.google.com/s2/favicons?sz=64&domain=${domain}`;
+                            
+                            snsHtml += `
+                                <a href="${url}" target="_blank" class="sns-icon" rel="noopener">
+                                    <img src="${iconUrl}" alt="icon" onerror="this.src='https://lucide.dev/api/icon/link'">
+                                </a>`;
+                        }
+                    });
+
+                    const card = document.createElement('div');
+                    card.className = 'creator-card rounded-2xl p-5 flex flex-col items-center text-center';
+                    card.innerHTML = `
+                        <img src="${c.icon_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + c.name}" class="w-24 h-24 rounded-full mb-4 object-cover border-2 border-[#626AA0]" onerror="this.src='https://api.dicebear.com/7.x/initials/svg?seed=${c.name}'">
+                        <div class="text-[10px] font-bold px-3 py-1 rounded-full base-bg mb-2 inline-block text-white">${c.creator_type}</div>
+                        <h2 class="text-lg font-bold mb-3">${c.name}</h2>
+                        <div class="flex flex-wrap justify-center gap-3 mb-4">${snsHtml}</div>
+                        ${c.note ? `<p class="text-xs text-gray-400 mt-2 line-clamp-3">${c.note}</p>` : ''}
+                    `;
+                    grid.appendChild(card);
+                });
+            }
+            lucide.createIcons();
+        }
+
+        function createStars() {
+            const container = document.getElementById('stars-container');
+            for (let i = 0; i < 50; i++) {
+                const star = document.createElement('div');
+                star.className = 'star';
+                const size = Math.random() * 2 + 1;
+                star.style.cssText = `width:${size}px; height:${size}px; left:${Math.random()*100}vw; top:${Math.random()*100}vh; animation:pulse ${Math.random()*3+2}s infinite ease-in-out`;
+                container.appendChild(star);
+            }
+        }
+
+        document.getElementById('searchInput').addEventListener('input', (e) => renderCreators(e.target.value, document.getElementById('typeFilter').value));
+        document.getElementById('typeFilter').addEventListener('change', (e) => renderCreators(document.getElementById('searchInput').value, e.target.value));
+
+        init();
+    </script>
+</body>
+</html>
